@@ -1,682 +1,265 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from supabase import create_client, Client
-from functools import wraps
-import os
-import uuid 
-import io 
-from werkzeug.utils import secure_filename 
-from flask import url_for 
-from datetime import datetime
+import nltk
+from nltk.corpus import wordnet
+import random
+import re
 
-# --- Configuration Supabase ---
-SUPABASE_URL = "https://ltsdxhvivevjyjytkpwl.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0c2R4aHZpdmV2anlqeXRrcHdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNDAyNTAsImV4cCI6MjA3ODgxNjI1MH0._HylggLMZvm11nNA8RyREVePk1vOUlnARKdVSV_dlHY"
+# IMPORTANT : Assurez-vous que les packages NLTK nécessaires sont téléchargés.
+# Si vous rencontrez des erreurs de type "LookupError", exécutez ces lignes
+# (une seule fois) dans votre environnement Python :
+# nltk.download('wordnet')
+# nltk.download('omw-1.4') # Open Multilingual Wordnet (pour le français)
 
-# Initialisation du client Supabase
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- Configuration Flask ---
-app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "CLÉ_SECRÈTE_TRÈS_LONGUE_ET_UNIQUE_POUR_LA_SÉCURITÉ_DES_SESSIONS") 
-app.config['SUPABASE_URL'] = SUPABASE_URL
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
-STORAGE_BUCKET = "images_produits"
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
-# ✅ Numéros WhatsApp pour la commande (sans le '+' pour l'API wa.me)
-WHATSAPP_NUMBERS = [
-    "224621822134", 
-    "224625480987"
-]
-PRIMARY_WHATSAPP_NUMBER = WHATSAPP_NUMBERS[0] if WHATSAPP_NUMBERS else None
-
-
-# --- LOGIQUE DES CATÉGORIES ---
-
-def get_categories_list():
-    """Retourne la liste des catégories/types de produits."""
-    return [
-        {'name': 'Téléphones', 'slug': 'telephone', 'icon': '📱'},
-        {'name': 'Ordinateurs', 'slug': 'ordinateur', 'icon': '💻'},
-        {'name': 'Accessoires', 'slug': 'accessoire', 'icon': '🎧'},
-    ]
-
-@app.context_processor
-def inject_globals():
-    """Rend les types de produits et le numéro WhatsApp PRINCIPAL disponibles globalement dans les templates Jinja."""
-    return dict(
-        categories=get_categories_list(),
-        # Injecter le numéro principal pour base.html et cart.html
-        whatsapp_number=PRIMARY_WHATSAPP_NUMBER 
-    )
-
-
-# --- Fonctions utilitaires ---
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def upload_image_to_supabase(file, product_id):
-    if file and allowed_file(file.filename):
-        file_extension = file.filename.rsplit('.', 1)[1].lower()
-        # Générer un nom de fichier unique
-        unique_filename = f"{uuid.uuid4()}.{file_extension}"
-        # Chemin de stockage: produits/<ID_produit>/<NOM_UNIQUE>.ext
-        storage_path = f"produits/{product_id}/{unique_filename}" 
-        
-        file.seek(0)
-        file_content = file.read()
-        
-        try:
-            # Upload du fichier au Storage
-            supabase.storage.from_(STORAGE_BUCKET).upload(storage_path, file_content, file_options={"content-type": file.mimetype})
-            # Récupérer l'URL publique
-            public_url = supabase.storage.from_(STORAGE_BUCKET).get_public_url(storage_path)
-            return public_url
-        except Exception as e:
-            print(f"Erreur d'upload Supabase: {e}")
-            return None
-    return None
-
-try:
-    from assistant_data import get_assistant_response 
-except ImportError:
-    def get_assistant_response(question):
-        return {"response": "L'assistant n'est pas configuré.", "intent": "none"}
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        user = session.get('user')
-        if not user:
-            return redirect(url_for('login', error="Accès refusé. Veuillez vous connecter pour accéder à l'administration."))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# --- NOUVEAUX ÉLÉMENTS POUR LE CONTENU 'À PROPOS' ---
-ABOUT_TABLE = 'about_page_content' 
-
-def get_or_create_about_content():
-    """Récupère l'unique ligne de contenu 'À Propos' ou la crée par défaut."""
-    
-    default_content = {
-        'mission_title': "Notre Mission : La Tech Facile en Guinée",
-        'mission_text': "Bienvenue chez Bon Coin Bon Prix ! Notre concept est simple : rendre la technologie de qualité (téléphones, ordinateurs, accessoires) accessible à tous, sans compromis sur le prix. Nous sélectionnons chaque article pour son authenticité et sa durabilité, vous garantissant le Bon Prix pour le Bon Coin.",
-        'commitment_title': "Notre Engagement Qualité",
-        'commitment_list_text': "Produits 100% Authentiques, Prix Justes et Compétitifs, Service Client Local, Livraison Fiable",
-        'whatsapp_number': PRIMARY_WHATSAPP_NUMBER,
-        'email': "contact@boncoinbonprix.com"
+# Modèle d'intentions (Simulation)
+INTENTS = {
+    # --- INTENTIONS D'IDENTITÉ ---
+    "identite_nom": {
+        "mots_cles": ["ton nom", "qui es-tu", "comment t'appelles-tu", "c'est quoi ton nom", "tu es qui", "petit nom", "ton titre", "votre nom"],
+        "reponses": [
+            "Mon nom est **Chérif**, je suis l'assistant virtuel de Bon Coin Bon Prix, un expert en électronique.",
+            "Je suis **Chérif**, ravi de vous servir ! Je peux vous aider avec nos téléphones, PC et accessoires.",
+            "Je m'appelle **Chérif**.",
+            "Vous parlez à **Chérif**, en quoi puis-je vous être utile ?",
+            "Moi, c'est **Chérif**, prêt à répondre à toutes vos questions commerciales ou techniques.",
+        ]
+    },
+    "identite_createur": {
+        "mots_cles": ["ton créateur", "qui t'a créé", "qui t'a fabriqué", "qui est ton développeur", "ton designer", "le papa de", "qui est Mamadou Chérif Diallo", "ton maître", "qui t'a mis au monde"],
+        "reponses": [
+            "J'ai été conçu et développé par **Mamadou Chérif Diallo**.",
+            "Mon créateur est **Mamadou Chérif Diallo**, il est très fier de moi !",
+            "Mon développement est l'œuvre de **Mamadou Chérif Diallo**.",
+            "C'est **Mamadou Chérif Diallo** qui m'a donné vie pour assister les clients.",
+            "Je suis une création de **Mamadou Chérif Diallo**.",
+        ]
+    },
+    # --- INTENTIONS GÉNÉRALES ---
+    "salutation": {
+        "mots_cles": ["bonjour", "salut", "coucou", "hello", "hey", "bonsoir", "slt", "bsr"],
+        "reponses": [
+            "Coucou ! Comment puis-je vous aider aujourd'hui ? Je suis Chérif, l'expert produit !",
+            "Bonjour ! Ravi de vous voir. Que puis-je faire pour vous guider dans vos achats ?",
+            "Salut ! Je suis Chérif. Posez-moi vos questions sur nos téléphones, PC ou accessoires.",
+            "Heureux de vous assister ! Vous cherchez un téléphone ou un ordinateur ?",
+            "Hey ! Je suis là pour toutes vos questions. N'hésitez pas !",
+        ]
+    },
+    # --- INTENTIONS TECHNIQUES (Configuration et Virus) ---
+    "config_ordinateur": {
+        "mots_cles": ["configurer ordinateur", "paramétrer pc", "installer windows", "premier démarrage pc", "comment allumer pc", "initialiser pc", "faire marcher mon ordinateur"],
+        "reponses": [
+            "**Conseils de configuration PC :**\n1. Démarrez l'appareil et suivez l'assistant Windows/macOS.\n2. Connectez-vous à votre réseau Wi-Fi.\n3. Créez ou connectez votre compte utilisateur (Microsoft/Apple).\n\nPour une aide spécifique, n'hésitez pas à demander la marque de votre PC.",
+            "L'étape clé est de vous connecter à Internet et de créer votre compte utilisateur. Avez-vous besoin d'aide avec un compte Microsoft ou Apple ?",
+            "Si vous configurez Windows, assurez-vous de choisir la bonne région. Si vous avez un PC neuf, tout est guidé pas à pas.",
+            "Quel est le système d'exploitation de votre ordinateur ? (Windows, macOS ou Linux)",
+            "Pour initialiser, insérez les disques d'installation (si non préinstallés) ou suivez simplement les instructions à l'écran après le premier allumage.",
+        ]
+    },
+    "config_telephone": {
+        "mots_cles": ["configurer téléphone", "installer sim", "nouveau smartphone", "activer téléphone", "mettre carte sim", "paramétrage android", "premier usage téléphone"],
+        "reponses": [
+            "**Pour la configuration de votre téléphone :**\n1. Insérez la carte SIM/mémoire.\n2. Allumez et suivez le guide : connexion Wi-Fi, compte Google/Apple.\n\nPensez à sécuriser votre appareil avec un code PIN et un schéma.",
+            "L'activation demande généralement votre adresse email pour lier le téléphone à votre compte. Avez-vous un compte Google (Android) ou Apple (iPhone) ?",
+            "Une fois allumé, le téléphone vous demandera de restaurer les données d'un ancien appareil, ou de commencer à zéro. Que préférez-vous faire ?",
+            "Je vous conseille d'activer les **mises à jour automatiques** pendant la configuration pour garantir la sécurité de votre nouvel appareil.",
+        ]
+    },
+    "suppression_virus": {
+        "mots_cles": ["enlever virus", "retirer malware", "nettoyer ordinateur", "ordinateur lent virus", "supprimer virus", "j'ai un virus", "comment désinfecter pc", "logiciel malveillant"],
+        "reponses": [
+            "Pour les virus simples, lancez une **analyse complète avec votre antivirus** (comme Windows Defender). Supprimez tous les logiciels ou extensions que vous n'avez pas installés.",
+            "Si votre navigateur est lent, vérifiez et désactivez toutes les extensions inconnues. Les extensions sont souvent la cause des publicités intempestives.",
+            "Si vous pensez avoir un virus, **déconnectez-vous d'Internet** et lancez une analyse en mode sans échec pour une détection plus efficace.",
+            "Un bon nettoyage des fichiers temporaires (utilisez l'outil Nettoyage de disque) aide souvent à améliorer la performance. Un antivirus est indispensable.",
+            "Il existe des outils gratuits et reconnus comme **Malwarebytes** pour scanner et supprimer les logiciels malveillants plus tenaces. Je vous le recommande si l'antivirus intégré ne suffit pas.",
+        ]
+    },
+    # --- INTENTIONS COMMERCIALES & LIVRAISON ---
+    "info_produits_generale": {
+        "mots_cles": ["téléphones", "ordinateurs", "accessoires", "produits", "types", "gamme", "marque", "catalogue", "ce que vous vendez", "vos articles"],
+        "reponses": [
+            "Nous proposons une large gamme de **téléphones**, d'**ordinateurs** (portables/bureaux) et d'**accessoires** de qualité. Cherchez-vous une catégorie ou une marque spécifique ?",
+            "Notre stock est régulièrement mis à jour avec des PC puissants et des smartphones de dernière génération. Quel est le produit qui vous intéresse le plus ?",
+            "Parlez-moi de la marque ou du type de produit que vous avez en tête, et je vous dirigerai vers les meilleures options. Nous avons un vaste catalogue !",
+            "Nous sommes spécialisés dans les appareils high-tech (téléphones, PC) et les accessoires compatibles.",
+            "Vous trouverez chez Bon Coin Bon Prix tout ce dont vous avez besoin en matière d'électronique et d'informatique.",
+        ]
+    },
+    "prix_produit": {
+        "mots_cles": ["prix", "coût", "combien", "cher", "tarif", "valeur", "somme", "argent"],
+        "reponses": [
+            "Pour obtenir le prix exact, veuillez consulter la page du produit qui vous intéresse. Nos prix sont affichés en **Francs Guinéens (GNF)** et sont très compétitifs.",
+            "Le prix est indiqué dans la description de chaque article. Les prix peuvent varier selon les **promotions en cours**.",
+            "Quel est le produit spécifique dont vous souhaitez connaître le tarif ? (Exemple : 'le prix du Samsung A50')",
+            "Les tarifs sont toujours indiqués sur la page de l'article.",
+            "Nous nous efforçons d'avoir des prix compétitifs. Quel est le produit dont vous souhaitez connaître le prix ?",
+        ]
+    },
+    "conseil_telephone": {
+        "mots_cles": ["meilleur téléphone", "quel téléphone", "nouveau téléphone", "smartphone", "quel android", "quel iphone", "conseil pour téléphone", "portable puissant", "téléphone pour la photo"],
+        "reponses": [
+            "Le meilleur téléphone dépend de vos besoins : **photo**, **puissance pour les jeux**, ou **autonomie** ? Quel est votre critère principal ?",
+            "Pour vous guider, quel est votre budget et quelles marques préférez-vous (Samsung, Apple, Xiaomi, etc.) ? Cela nous aidera à affiner la recherche.",
+            "Voulez-vous un téléphone sous **Android ou iOS** ? Si vous n'êtes pas sûr, je peux vous donner les avantages des deux.",
+            "Si vous cherchez la meilleure performance, regardez nos modèles haut de gamme avec au moins **8 Go de RAM**.",
+            "Nos conseillers recommandent souvent les modèles avec une grande capacité de batterie pour une utilisation quotidienne sans stress.",
+        ]
+    },
+    "conseil_ordinateur": {
+        "mots_cles": ["meilleur pc", "quel ordinateur", "pc portable", "pc bureau", "carte graphique", "mémoire vive", "processeur", "quel pc acheter", "ordinateur pour jeux", "pc pas cher"],
+        "reponses": [
+            "Pour un ordinateur, nous devons considérer l'usage. Est-ce pour le **travail de bureau**, les **jeux vidéo**, ou le **montage vidéo/graphisme** ? C'est l'élément clé.",
+            "Concentrez-vous sur la **RAM** (mémoire vive) et le **processeur (CPU)** pour la vitesse. Quelle est la principale tâche que vous effectuerez ?",
+            "Nos PC portables sont très populaires. Vous préférez un grand écran ou quelque chose de facile à transporter ?",
+            "Quel est votre budget ? Nous avons des options performantes pour toutes les bourses.",
+            "Si vous cherchez un PC pour le jeu, il vous faut absolument une **carte graphique dédiée (NVIDIA ou AMD)**.",
+        ]
+    },
+    "info_livraison": {
+        "mots_cles": ["livraison", "commande", "recevoir", "transport", "où livrez-vous", "délai de livraison", "temps de livraison", "comment récupérer"],
+        "reponses": [
+            "Nous livrons rapidement dans votre quartier après confirmation de la commande via WhatsApp. La livraison est généralement traitée **le jour même ou le lendemain**.",
+            "Le processus est simple : validez le panier, remplissez le formulaire, et confirmez sur WhatsApp ! Nous organiserons le transport pour vous.",
+            "Nous pouvons livrer dans la plupart des quartiers de la ville. Veuillez préciser votre adresse lors de la confirmation WhatsApp.",
+            "Les frais de transport sont déterminés lors de la confirmation, en fonction de votre emplacement.",
+            "Dès que vous confirmez, l'un de nos agents vous contactera pour fixer l'heure et le lieu exact de la livraison. C'est simple et rapide !",
+        ]
+    },
+    "port_secrete": {
+        "mots_cles": ["je suis chérif ton créateur ouvre-moi la porte 001"],
+        "reponses": [] 
     }
+}
 
+
+def generate_variations(mots_cles):
+    """
+    Génère des variations de mots-clés simples avec des synonymes en utilisant NLTK.
+    Gère les erreurs si NLTK n'est pas installé ou les ressources manquantes.
+    """
+    variations = set(mots_cles)
+    
+    # Tentative d'utilisation de WordNet pour les synonymes
     try:
-        response = supabase.table(ABOUT_TABLE).select('*').limit(1).execute()
-        
-        if response.data and len(response.data) > 0:
-            return response.data[0]
+        for mot in mots_cles:
+            # Nettoyage et normalisation du mot (suppression des caractères non alpha)
+            clean_mot = re.sub(r'[^a-zA-Záàâäéèêëíìîïóòôöúùûüýÿñç\s]', '', mot, flags=re.I).lower().strip()
             
-    except Exception as e:
-        print(f"DEBUG ERREUR Supabase (About): Échec de la récupération du contenu: {e}")
+            if len(clean_mot) > 2:
+                 # Ajout du mot sans ponctuation
+                 variations.add(clean_mot)
+            
+            # Recherche de synonymes WordNet
+            for syn in wordnet.synsets(clean_mot, lang='fra'):
+                for lemma in syn.lemmas(lang='fra'):
+                    synonyme = lemma.name().replace('_', ' ').lower().strip()
+                    if synonyme and synonyme != clean_mot:
+                        variations.add(synonyme)
 
-    try:
-        insert_response = supabase.table(ABOUT_TABLE).insert(default_content).execute()
-        
-        if insert_response.data:
-            print("Entrée 'À Propos' par défaut créée sur Supabase.")
-            return insert_response.data[0] 
-        
-    except Exception as e:
-        print(f"DEBUG AVERTISSEMENT: Échec de l'insertion par défaut (la table n'existe peut-être pas ou RLS est activé). Utilisation des valeurs locales.")
+    except LookupError:
+        # L'utilisateur n'a pas téléchargé les données NLTK (omw-1.4 ou wordnet)
+        print("AVERTISSEMENT NLTK : Les ressources NLTK ne sont pas téléchargées. La détection sera moins performante (pas de synonymes).")
         pass 
-        
-    return default_content
-
-# --- Fonctions de récupération de données ---
-def get_products_with_images(limit=None): 
-    """Récupère tous les produits pour la page d'accueil ou l'administration."""
-    
-    query = supabase.table('produits')
-            
-    # Récupérer l'URL de l'image principale
-    select_string = "*, images_produits!inner(url, est_principale)" 
-    query = query.select(select_string)
-    
-    if limit:
-        query = query.limit(limit) 
-
-    try:
-        products_response = query.execute()
     except Exception as e:
-        print(f"DEBUG ERREUR Supabase: Échec de l'exécution de la requête: {e}")
-        return []
+        # Autres erreurs NLTK
+        print(f"ERREUR NLTK : Problème lors de la génération des synonymes : {e}")
+        pass
+        
+    return list(variations)
 
-    products = []
-    if not products_response.data:
-        return []
+
+def normalize_question(question):
+    """Nettoyage et normalisation du texte pour un matching plus précis."""
     
-    category_map = {c['slug']: c['name'] for c in get_categories_list()}
-
-    for p in products_response.data:
-        image_data = p.pop('images_produits', None) 
-        image_url = None
-        
-        # Logique de récupération de l'image principale
-        if image_data and isinstance(image_data, list):
-             main_image = next((img['url'] for img in image_data if img.get('est_principale', False)), None)
-             image_url = main_image
-        
-        p['image_url'] = image_url if image_url else url_for('static', filename='images/default_product.jpg')
-        p['category_name'] = category_map.get(p.get('type'), 'Divers') 
-        products.append(p)
+    # 1. Mise en minuscule
+    question_lower = question.lower()
     
-    return products
-
-# --- Routes Publiques ---
-@app.route('/')
-def index():
-    """Page d'accueil : Affiche tous les produits (limité à 8)."""
-    products = get_products_with_images(limit=8) 
-    return render_template('index.html', products=products)
-
-@app.route('/product/<uuid:product_id>')
-def product_detail(product_id):
-    """Affiche les détails d'un produit, y compris les images multiples."""
-    str_product_id = str(product_id)
+    # 2. Remplacement des ponctuations par des espaces pour isoler les mots
+    # Permet de matcher "pc?" ou "pc." avec "pc"
+    cleaned_question = re.sub(r'[^\w\s]', ' ', question_lower)
     
-    try:
-        # 1. Récupérer le produit (y compris le stock et toutes les images)
-        product_res = supabase.table('produits').select('*, images_produits(id, url, est_principale)').eq('id', str_product_id).single().execute()
-        product_data = product_res.data
-        
-        if not product_data:
-            return "Produit non trouvé", 404
-            
-        images_res = product_data.pop('images_produits', [])
-
-        # 2. Séparer l'image principale et les images de détail
-        default_url = url_for('static', filename='images/default_product.jpg')
-        main_image = next((img['url'] for img in images_res if img.get('est_principale', False)), default_url)
-        detail_images = [img for img in images_res if not img.get('est_principale', False)] # Garder l'ID pour la suppression future
-
-        product_data['main_image'] = main_image
-        product_data['detail_images'] = detail_images
-
-        # Ajouter le nom de la catégorie pour l'affichage
-        category_map = {c['slug']: c['name'] for c in get_categories_list()}
-        product_data['category_name'] = category_map.get(product_data.get('type'), 'Divers') 
-        
-        return render_template('product_detail.html', product=product_data)
-
-    except Exception as e:
-        print(f"DEBUG ERREUR ROUTE DETAIL: {e}")
-        return "Erreur lors de la récupération des détails du produit", 500
-
-@app.route('/category/<category_name>')
-def category_page(category_name):
-    """Affiche les produits par type en filtrant les données en Python."""
+    # 3. Remplacement des tirets (ex: "téléphone-portable" devient "téléphone portable")
+    cleaned_question = cleaned_question.replace('-', ' ')
     
-    category_titles = {
-        'telephone': 'Téléphones 📱',
-        'ordinateur': 'Ordinateurs 💻',
-        'accessoire': 'Accessoires 🎧'
-    }
+    # 4. Suppression des espaces multiples
+    cleaned_question = re.sub(r'\s+', ' ', cleaned_question).strip()
     
-    if category_name not in category_titles:
-        return redirect(url_for('index')) 
-
-    try:
-        all_products = get_products_with_images() 
-        
-        filtered_products = [
-            p for p in all_products 
-            if p.get('type') == category_name
-        ]
-        
-        template_name = 'category_view.html' 
-
-        return render_template(
-            template_name, 
-            products=filtered_products, 
-            title=category_titles[category_name],
-            category=category_name
-        )
-    except Exception as e:
-        print(f"DEBUG ERREUR ROUTE: Erreur lors de la récupération/filtrage des données: {e}")
-        return render_template(
-            'category_view.html', 
-            products=[], 
-            title=category_titles.get(category_name, 'Catégorie'), 
-            error=f"Erreur lors du traitement des produits: {e}"
-        )
-
-# --- Routes d'Authentification / Assistant ---
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        try:
-            user_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            user_data = user_response.user
-            
-            if user_data:
-                session['user'] = {'id': user_data.id, 'email': user_data.email} 
-                return redirect(url_for('admin_dashboard'))
-            else:
-                error = "Email ou mot de passe incorrect."
-        except Exception as e:
-            error_message = str(e)
-            error = f"Erreur d'authentification : {error_message}"
-        
-        return render_template('login.html', error=error)
-    return render_template('login.html', error=request.args.get('error'))
+    return cleaned_question
 
 
-@app.route('/logout')
-def logout():
-    supabase.auth.sign_out()
-    session.pop('user', None)
-    return redirect(url_for('index'))
-
-@app.route('/cart')
-def cart():
-    """Page du Panier."""
-    return render_template('cart.html')
-
-@app.route('/about')
-def about():
+def get_assistant_response(question):
     """
-    Page À Propos : Récupère le contenu modifiable depuis Supabase.
+    Détecte l'intention avec robustesse et renvoie une réponse aléatoire variée.
     """
-    about_content = get_or_create_about_content()
-    return render_template('about.html', about_content=about_content)
+    # Normalisation de la question une seule fois
+    cleaned_question = normalize_question(question)
 
-# --- NOUVELLE ROUTE ADMIN POUR ÉDITER LE CONTENU 'À PROPOS' (VÉRIFIÉE) ---
-@app.route('/admin/about/edit', methods=['GET', 'POST'])
-@admin_required
-def admin_edit_about():
-    
-    about_content = get_or_create_about_content()
-    error = None
-    success = None
-    
-    # Récupérer products_count de manière sécurisée pour l'héritage du template admin
-    try:
-        products_count_res = supabase.table('produits').select('id', count='exact').execute()
-        products_count = products_count_res.count if products_count_res.count is not None else 0
-    except Exception:
-        products_count = 0 
-    
-    if request.method == 'POST':
-        try:
-            updated_data = {
-                'mission_title': request.form['mission_title'],
-                'mission_text': request.form['mission_text'],
-                'commitment_title': request.form['commitment_title'],
-                'commitment_list_text': request.form['commitment_list_text'],
-                'whatsapp_number': request.form['whatsapp_number'],
-                'email': request.form['email']
-            }
-            
-            # Mise à jour de la première (et unique) ligne
-            if 'id' in about_content:
-                supabase.table(ABOUT_TABLE).update(updated_data).eq('id', about_content['id']).execute()
-            else:
-                supabase.table(ABOUT_TABLE).update(updated_data).limit(1).execute() 
-                
-            success = "Le contenu de la page 'À Propos' a été mis à jour avec succès !"
-            # Redirection après le POST pour éviter l'envoi multiple
-            return redirect(url_for('admin_edit_about', success=success)) 
+    # 1. Vérification de la Porte Secrète (Check strict)
+    # On utilise une vérification simple et normalisée du mot-clé
+    if "je suis cherif ton createur ouvre moi la porte 001" in cleaned_question:
+        return {"intent": "port_secrete", "response": ""}
 
-        except Exception as e:
-            error = f"Erreur lors de la mise à jour du contenu: {e}"
-            # Utiliser les données du formulaire en cas d'erreur
-            about_content = about_content.copy() 
-            about_content.update(request.form)
+    # 2. Détection d'intention
+    best_intent = "defaut"
+    max_matches = 0
     
-    # Recharger le contenu mis à jour si on revient avec un succès dans l'URL (GET)
-    if request.args.get('success'):
-        success = request.args.get('success')
-        about_content = get_or_create_about_content()
+    # Liste pour stocker les intentions avec le plus de correspondances
+    top_intents = [] 
+
+    # On utilise un ensemble (set) pour garantir que le même mot-clé dans la question
+    # ne compte pas deux fois (même s'il apparaît dans plusieurs variations)
+    matched_words = set() 
+    
+    # Itération sur toutes les intentions pour trouver le meilleur match
+    for intent, data in INTENTS.items():
+        if intent == "port_secrete":
+            continue
+
+        current_matches = 0
         
-
-    return render_template('admin/edit_about.html', 
-                           about_content=about_content,
-                           error=error,
-                           success=success,
-                           products_count=products_count)
-
-
-@app.route('/api/assistant', methods=['POST'])
-def handle_assistant():
-    data = request.get_json()
-    user_question = data.get('question', '')
-    
-    if not user_question:
-        return jsonify({"response": "Veuillez poser une question."})
-
-    response_data = get_assistant_response(user_question)
-    
-    if response_data["intent"] == "port_secrete":
-        return jsonify({
-            "response": "🔑 Accès Administrateur Déverrouillé. Redirection...",
-            "redirect": url_for('login')
-        })
-    # ✅ J'ajoute les numéros WhatsApp pour le JS
-    if response_data["intent"] == "defaut":
-        response_data["contact_wa"] = [
-            {"label": "Support Principal", "number": WHATSAPP_NUMBERS[0]},
-            {"label": "Support Secondaire", "number": WHATSAPP_NUMBERS[1]}
-        ]
+        # Utilisation des variations (y compris synonymes)
+        for mot_cle in generate_variations(data["mots_cles"]):
+            # On vérifie si le mot-clé (ou sa variation) est dans la question normalisée
+            if mot_cle in cleaned_question:
+                current_matches += 1
+                # On ajoute le mot-clé d'origine à l'ensemble pour une potentielle détection d'ambiguïté future
+                matched_words.add(mot_cle) 
         
-    return jsonify({
-        "response": response_data["response"],
-        "intent": response_data["intent"],
-        "contact_wa": response_data.get("contact_wa", [])
-    })
-
-
-# --- NOUVELLE ROUTE API : ENREGISTRER LA COMMANDE (UNIFIÉ) ---
-@app.route('/api/order/submit', methods=['POST'])
-def submit_order():
-    data = request.get_json()
-    cart_items = data.get('cart_items', [])
+        # Mise à jour du meilleur match trouvé
+        if current_matches > max_matches:
+            max_matches = current_matches
+            best_intent = intent
+            # Si nous trouvons un nouveau meilleur, on réinitialise la liste des tops
+            top_intents = [intent] 
+        elif current_matches == max_matches and current_matches > 0:
+            # Gestion de l'égalité : ajout à la liste pour les départager plus tard si nécessaire
+            top_intents.append(intent) 
     
-    if not cart_items:
-        return jsonify({"success": False, "message": "Le panier est vide."}), 400
-        
-    try:
-        # Enregistrer la commande
-        order_data = {
-            'produits_json': cart_items, # Stocke la liste des produits dans le panier
-            # Utilisez datetime.now().isoformat() pour le timestamp si 'now()' pose problème
-            'date_commande': datetime.now().isoformat(), 
-            'statut': 'En attente WhatsApp' # Statut initial
-        }
-        
-        response = supabase.table('commandes').insert(order_data).execute()
-        
-        if response.data:
-            order_id = response.data[0].get('id', 'N/A')
-            return jsonify({"success": True, "message": "Commande enregistrée en attente.", "order_id": order_id})
-        else:
-            raise Exception("Aucune donnée de commande retournée.")
-
-    except Exception as e:
-        print(f"DEBUG ERREUR ENREGISTREMENT COMMANDE: {e}")
-        return jsonify({"success": False, "message": f"Erreur serveur: {e}"}), 500
-
-
-# --- Routes Administrateur ---
-
-@app.route('/admin')
-@admin_required
-def admin_dashboard():
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    return render_template('admin/dashboard.html', products_count=products_count)
-
-@app.route('/admin/products', methods=['GET'])
-@admin_required
-def admin_manage_products():
-    search_query = request.args.get('search', '')
+    # 3. Génération de la Réponse
     
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    
-    if search_query:
-        try:
-            products_response = supabase.table('produits').select("*, images_produits(url, est_principale)").like('nom', f'%{search_query}%').execute()
-            
-            products_data = products_response.data
-            products = []
-            category_map = {c['slug']: c['name'] for c in get_categories_list()}
-            
-            for p in products_data:
-                image_data = p.pop('images_produits', None) 
-                image_url = None
-                if image_data and isinstance(image_data, list):
-                    main_image = next((img['url'] for img in image_data if img.get('est_principale', False)), None)
-                    image_url = main_image
-                    
-                p['image_url'] = image_url if image_url else url_for('static', filename='images/default_product.jpg')
-                p['category_name'] = category_map.get(p.get('type'), 'Divers') 
-                products.append(p)
-            
-        except Exception as e:
-            print(f"DEBUG ERREUR RECHERCHE: {e}")
-            products = []
-            
-        return render_template('admin/manage_products.html', products=products, search_query=search_query, products_count=products_count)
-
+    # Seulement un match si on a trouvé au moins 1 mot-clé
+    if max_matches > 0:
+        # S'il y a égalité, on choisit aléatoirement parmi les meilleures
+        final_intent = random.choice(top_intents) 
+        return {"intent": final_intent, "response": random.choice(INTENTS[final_intent]["reponses"])}
+        
     else:
-        products = get_products_with_images()
-        return render_template('admin/manage_products.html', products=products, search_query=search_query, products_count=products_count)
-
-
-@app.route('/admin/products/add', methods=['GET', 'POST'])
-@admin_required
-def admin_add_product():
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    
-    if request.method == 'POST':
-        try:
-            product_data = {
-                'nom': request.form['nom'],
-                'description': request.form['description'],
-                'prix_gnf': float(request.form['prix']),
-                'type': request.form['type'],
-                'stock': int(request.form.get('stock', 0)),
-            }
-            response = supabase.table('produits').insert(product_data).execute()
-            
-            if response.data and response.data[0].get('id'):
-                product_id = str(response.data[0]['id'])
-                
-                # Gestion de l'image principale
-                if 'image_file' in request.files and request.files['image_file'].filename != '':
-                    file = request.files['image_file']
-                    
-                    image_url = upload_image_to_supabase(file, product_id)
-                    
-                    if image_url:
-                        # Insère l'image principale
-                        supabase.table('images_produits').insert({
-                            'produit_id': product_id,
-                            'url': image_url,
-                            'est_principale': True
-                        }).execute()
-                    else:
-                        raise Exception("Échec de l'upload de l'image principale ou format non autorisé.")
-                
-                return redirect(url_for('admin_manage_products'))
-            else:
-                error = f"Erreur lors de l'ajout du produit: {response.data}"
-        except Exception as e:
-            error = f"Erreur: {e}"
+        # --- LOGIQUE DE CONTACT WHATSAPP (DEFAUT) ---
         
-        return render_template('admin/add_product.html', 
-                               error=error,
-                               product=None, 
-                               current_image_url=None,
-                               products_count=products_count
-                               ) 
+        # Liste des numéros de contact (peut être déplacée dans main.py ou une config globale)
+        contact_numbers = [
+            {"number": "+224621822134", "label": "Service Client 1"},
+            {"number": "+224625480987", "label": "Service Client 2"}
+        ]
         
-    return render_template('admin/add_product.html', product=None, current_image_url=None, products_count=products_count)
-
-
-@app.route('/admin/products/edit/<uuid:product_id>', methods=['GET', 'POST'])
-@admin_required
-def admin_edit_product(product_id):
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    
-    str_product_id = str(product_id)
-    
-    # Récupération du produit
-    product_res = supabase.table('produits').select('*').eq('id', str_product_id).single().execute()
-    product = product_res.data
-    
-    if not product:
-        return "Produit non trouvé", 404
+        # Message d'erreur professionnel
+        default_message = random.choice([
+            "Désolé, je n'ai pas trouvé de réponse claire pour cette question. Pour vous aider immédiatement, je peux vous mettre en contact avec notre équipe.",
+            "Hmm, cette requête dépasse ma base de connaissances actuelle. Laissez-moi vous connecter à un expert humain.",
+            "Je n'ai pas saisi votre requête. Cliquez ci-dessous pour contacter directement un de nos conseillers sur WhatsApp avec votre question.",
+        ])
         
-    # Récupération de l'image principale actuelle pour l'affichage
-    current_image_res = supabase.table('images_produits').select('url').eq('produit_id', str_product_id).eq('est_principale', True).limit(1).execute().data
-    current_image_url = current_image_res[0]['url'] if current_image_res else ''
-        
-    if request.method == 'POST':
-        try:
-            product_data = {
-                'nom': request.form['nom'],
-                'description': request.form['description'],
-                'prix_gnf': float(request.form['prix']),
-                'type': request.form['type'],
-                'stock': int(request.form.get('stock', 0)),
-            }
-            # Mise à jour des données du produit
-            supabase.table('produits').update(product_data).eq('id', str_product_id).execute()
-            
-            # LOGIQUE D'UPLOAD DE L'IMAGE PRINCIPALE
-            if 'image_file' in request.files and request.files['image_file'].filename != '':
-                file = request.files['image_file']
-                
-                new_image_url = upload_image_to_supabase(file, str_product_id)
-                
-                if new_image_url:
-                    if current_image_url:
-                        # Mise à jour de l'URL existante
-                        supabase.table('images_produits').update({'url': new_image_url}).eq('produit_id', str_product_id).eq('est_principale', True).execute()
-                    else:
-                        # Insertion si l'image principale n'existait pas
-                        supabase.table('images_produits').insert({
-                            'produit_id': str_product_id,
-                            'url': new_image_url,
-                            'est_principale': True
-                        }).execute()
-                else:
-                    raise Exception("Échec de l'upload de l'image principale ou format non autorisé.")
-
-            return redirect(url_for('admin_manage_products'))
-            
-        except Exception as e:
-            error = f"Erreur lors de la modification: {e}"
-            return render_template('admin/add_product.html', product=product, error=error, current_image_url=current_image_url, products_count=products_count)
-            
-    return render_template('admin/add_product.html', product=product, current_image_url=current_image_url, products_count=products_count) 
-
-
-@app.route('/admin/orders')
-@admin_required
-def admin_manage_orders():
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    
-    try:
-        orders_res = supabase.table('commandes').select('*').order('date_commande', desc=True).execute()
-        orders = orders_res.data
-        
-        return render_template('admin/manage_orders.html', orders=orders, products_count=products_count)
-
-    except Exception as e:
-        print(f"DEBUG ERREUR GESTION COMMANDES: {e}")
-        return render_template('admin/manage_orders.html', orders=[], error=f"Erreur de connexion à la base de données: {e}", products_count=products_count)
-
-
-@app.route('/admin/orders/update_status/<uuid:order_id>', methods=['POST'])
-@admin_required
-def admin_update_order_status(order_id):
-    new_status = request.form.get('status')
-    if not new_status:
-        return "Statut manquant", 400
-        
-    try:
-        supabase.table('commandes').update({'statut': new_status}).eq('id', str(order_id)).execute()
-        return redirect(url_for('admin_manage_orders'))
-    except Exception as e:
-        return f"Erreur lors de la mise à jour: {e}", 500
-
-
-@app.route('/admin/products/images/<uuid:product_id>', methods=['GET', 'POST'])
-@admin_required
-def admin_manage_detail_images(product_id):
-    products_count_res = supabase.table('produits').select('id', count='exact').execute()
-    products_count = products_count_res.count if products_count_res.count is not None else 0
-    
-    str_product_id = str(product_id)
-    
-    # 1. Récupérer le produit et les images existantes
-    product_res = supabase.table('produits').select('nom').eq('id', str_product_id).single().execute()
-    product = product_res.data
-    
-    if not product:
-        return "Produit non trouvé", 404
-        
-    current_detail_images_res = supabase.table('images_produits').select('id, url, est_principale').eq('produit_id', str_product_id).eq('est_principale', False).execute().data
-    
-    error = None
-
-    if request.method == 'POST':
-        # 2. LOGIQUE D'UPLOAD D'UNE NOUVELLE IMAGE DE DÉTAIL
-        if 'detail_image_file' in request.files and request.files['detail_image_file'].filename != '':
-            detail_file = request.files['detail_image_file']
-            
-            new_detail_image_url = upload_image_to_supabase(detail_file, str_product_id)
-            
-            if new_detail_image_url:
-                try:
-                    # Insère la nouvelle image comme image de détail
-                    supabase.table('images_produits').insert({
-                        'produit_id': str_product_id,
-                        'url': new_detail_image_url,
-                        'est_principale': False # C'est une image de détail
-                    }).execute()
-                    # Redirection GET pour effacer le POST et actualiser la liste
-                    return redirect(url_for('admin_manage_detail_images', product_id=product_id)) 
-                except Exception as e:
-                    error = f"Erreur d'enregistrement dans la base de données: {e}"
-            else:
-                error = "Échec de l'upload de l'image ou format non autorisé."
-        else:
-            error = "Veuillez sélectionner un fichier à télécharger."
-
-    # Affichage du formulaire et des images existantes
-    return render_template('admin/manage_detail_images.html', 
-                           product=product, 
-                           product_id=product_id,
-                           detail_images=current_detail_images_res,
-                           error=error,
-                           products_count=products_count)
-
-
-@app.route('/admin/images/delete_detail/<uuid:image_id>', methods=['POST'])
-@admin_required
-def admin_delete_image_detail(image_id):
-    try:
-        image_res = supabase.table('images_produits').select('produit_id').eq('id', str(image_id)).single().execute()
-        image_data = image_res.data
-        
-        if image_data:
-            product_id = image_data['produit_id']
-            
-            supabase.table('images_produits').delete().eq('id', str(image_id)).execute()
-            
-            return redirect(url_for('admin_manage_detail_images', product_id=product_id))
-        else:
-             return "Image non trouvée", 404
-
-    except Exception as e:
-        print(f"DEBUG ERREUR SUPPRESSION IMAGE: {e}")
-        return "Erreur lors de la suppression de l'image", 500
-
-
-@app.route('/admin/products/delete/<uuid:product_id>', methods=['POST'])
-@admin_required
-def admin_delete_product(product_id):
-    supabase.table('produits').delete().eq('id', str(product_id)).execute()
-    return redirect(url_for('admin_manage_products'))
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        return {
+            "intent": "defaut", 
+            "response": default_message,
+            "contact_wa": contact_numbers
+}
