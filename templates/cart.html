@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Votre Panier{% endblock %}
+
+{% block content %}
+    <div class="container cart-container">
+        <h2 class="section-title">🛒 Votre Panier</h2>
+
+        <div id="cart-items-list" class="cart-items-list">
+            </div>
+
+        <p id="empty-cart-message" class="text-center mt-5 mb-5" style="display: none;">
+            Votre panier est vide. Ajoutez des produits pour voir votre commande ici.
+        </p>
+
+        <div id="cart-checkout-section" style="display: none;">
+            <hr class="mt-4 mb-4">
+            
+            <div class="cart-summary-box">
+                <div class="cart-total-line">
+                    <strong>Total de la commande:</strong>
+                    <span id="cart-total-amount" class="price-total">0 GNF</span>
+                </div>
+                
+                <button id="show-checkout-btn" class="btn btn-success btn-block mt-4 mb-4">
+                    Passer à la Commande 🚀
+                </button>
+            </div>
+
+
+            <div id="checkout-form-container" class="checkout-form-container mt-4" style="display: none;">
+                <h3>Finaliser la commande (Livraison)</h3>
+                <form id="checkout-form" class="form-style">
+                    <div class="form-group">
+                        <label for="client-name">Nom et Prénom :</label>
+                        <input type="text" id="client-name" name="client-name" class="text-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="client-quartier">Quartier/Ville de livraison :</label>
+                        <input type="text" id="client-quartier" name="client-quartier" class="text-input" required>
+                    </div>
+                    <button type="submit" class="btn btn-whatsapp btn-block mt-3">
+                        <i class="fab fa-whatsapp"></i> ENVOYER LA COMMANDE VIA WHATSAPP
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        // Récupérer le numéro WhatsApp injecté par Flask dans le contexte global
+        const WHATSAPP_NUMBER = "{{ whatsapp_number | default('') }}";
+        
+        // --- LOGIQUE D'AFFICHAGE DU FORMULAIRE DE COMMANDE ---
+        document.getElementById('show-checkout-btn').addEventListener('click', function() {
+            document.getElementById('checkout-form-container').style.display = 'block';
+            this.style.display = 'none'; // Cacher le bouton après le clic
+        });
+
+        // --- LOGIQUE DE SOUMISSION WHATSAPP (CORRIGÉE) ---
+        document.getElementById('checkout-form').addEventListener('submit', function(e) {
+            e.preventDefault(); 
+
+            // 1. Vérification du numéro
+            if (!WHATSAPP_NUMBER) {
+                alert("Erreur: Aucun numéro WhatsApp configuré dans l'application. Veuillez contacter l'administrateur.");
+                return;
+            }
+            
+            // 2. Récupérer les données du formulaire
+            const clientName = document.getElementById('client-name').value;
+            const deliveryLocation = document.getElementById('client-quartier').value;
+            
+            if (clientName.trim() === '' || deliveryLocation.trim() === '') {
+                alert("Veuillez remplir votre Nom et Prénom ainsi que le Quartier/Ville de livraison.");
+                return;
+            }
+
+            // 3. Simuler la récupération des articles du panier (Adapter à votre JS réel de panier)
+            // NOTE: Votre panier réel utilise probablement le Local Storage. 
+            // Ce code simule la structure pour construire le message.
+            let cartItems = JSON.parse(localStorage.getItem('cart') || '[]');
+            
+            if (cartItems.length === 0) {
+                 alert("Votre panier est vide. Impossible d'envoyer la commande.");
+                 return;
+            }
+
+            // 4. Construire le message de commande
+            let message = `*COMMANDE BON COIN BON PRIX*\n\n`;
+            message += `*Client* : ${clientName}\n`;
+            message += `*Livraison* : ${deliveryLocation}\n\n`;
+            message += `*Détail de la commande*:\n`;
+            
+            let total = 0;
+            
+            cartItems.forEach(item => {
+                // Assurez-vous que la structure de vos objets "item" dans le Local Storage contient ces champs
+                const subtotal = item.price * item.quantity;
+                
+                message += `- ${item.quantity} x ${item.name} (${item.price.toLocaleString('fr-GN')} GNF) = ${subtotal.toLocaleString('fr-GN')} GNF\n`; 
+                total += subtotal;
+            });
+            
+            message += `\n*Total Général*: ${total.toLocaleString('fr-GN')} GNF`;
+
+            // 5. Encoder le message pour l'URL
+            const encodedMessage = encodeURIComponent(message);
+            
+            // 6. Créer et ouvrir le lien WhatsApp
+            const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+
+            window.open(whatsappUrl, '_blank');
+            
+            // Optionnel : Vider le panier après l'envoi
+            // localStorage.removeItem('cart');
+            // location.reload(); 
+        });
+
+        // --------------------------------------------------------------------------------
+        // REMARQUE : Vous devez vous assurer que le fichier static/js/main.js 
+        // gère la lecture/écriture du Local Storage pour la gestion des articles, 
+        // du total, et de l'affichage initial de #cart-items-list et du total.
+        // --------------------------------------------------------------------------------
+    </script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script> 
+{% endblock %}

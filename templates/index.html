@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Accueil{% endblock %}
+
+{% block content %}
+    
+    <div class="banner-section" 
+         style="background-image: url('https://ltsdxhvivevjyjytkpwl.supabase.co/storage/v1/object/public/images_produits/Screenshot_20251028_112231_Gallery.jpg');">
+        
+        <div class="banner-overlay">
+            <h1>Bienvenue chez Bon Coin Bon Prix !</h1> 
+            <p>Découvrez notre sélection des meilleurs produits électroniques.</p>
+            </div>
+    </div>
+    
+    <h2 class="section-title" id="featured-products"></h2> 
+    
+    <div class="product-grid">
+        {% for product in products %}
+        
+        <div class="product-card" data-product-id="{{ product.id }}">
+            
+            <a href="{{ url_for('product_detail', product_id=product.id) }}" class="product-link">
+            
+                <span class="product-category">
+                    {{ product.category_name }}
+                </span>
+                
+                <div class="product-image-placeholder">
+                    <img src="{{ product.image_url or url_for('static', filename='images/default_product.jpg') }}" alt="{{ product.nom }}">
+                    
+                    <div class="price-overlay">
+                        <p class="price">{{ "{:,.0f}".format(product.prix_gnf|float).replace(",", " ") }} GNF</p>
+                    </div>
+                </div>
+                
+                </a> 
+        </div>
+        
+        {% else %}
+        <p class="no-products">Aucun produit disponible pour le moment. Revenez plus tard !</p>
+        {% endfor %}
+    </div>
+    
+    <hr>
+    
+{% endblock %}

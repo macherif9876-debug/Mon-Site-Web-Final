@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Admin - {% if product %}Modifier{% else %}Ajouter{% endif %} Produit{% endblock %}
+
+{% block content %}
+    <div class="admin-container">
+        <h2>{% if product %}✏️ Modifier Produit: {{ product.nom }}{% else %}➕ Ajouter un Nouveau Produit{% endif %}</h2>
+        
+        {% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+
+        <form method="POST" enctype="multipart/form-data">
+            
+            <div class="form-field-group">
+                <label for="nom">Nom du Produit:</label>
+                <input type="text" id="nom" name="nom" value="{{ product.nom if product else '' }}" required class="text-input">
+            </div>
+            
+            <div class="form-field-group">
+                <label for="description">Description:</label>
+                <textarea id="description" name="description" required class="text-input">{{ product.description if product else '' }}</textarea>
+            </div>
+            
+            <div class="form-field-group">
+                <label for="prix">Prix (GNF):</label>
+                <input type="text" id="prix" name="prix" pattern="[0-9]*" inputmode="numeric" value="{{ product.prix_gnf if product else '' }}" required class="text-input">
+                <small style="color: #6c757d;">(Utilisez des chiffres uniquement. Ex: 1500000)</small>
+            </div>
+
+            <div class="form-field-group">
+                <label for="stock">Stock du Produit:</label>
+                <input type="number" id="stock" name="stock" 
+                       value="{{ product.stock if product and product.stock is not none else 0 }}" 
+                       required min="0" class="text-input">
+                <small style="color: #6c757d;">(Quantité disponible en stock.)</small>
+            </div>
+            
+            <div class="form-field-group">
+                <label for="type">Type de Produit:</label>
+                <select id="type" name="type" required class="text-input">
+                    <option value="">-- Choisir une catégorie --</option>
+                    {% for category in categories %}
+                        <option value="{{ category.slug }}" 
+                            {% if product and product.type == category.slug %}selected{% endif %}>
+                            {{ category.icon }} {{ category.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-field-group">
+                <label for="image_file">Télécharger Image Principale:</label>
+                <input type="file" id="image_file" name="image_file" accept="image/*" class="text-input" {% if not product %}required{% endif %}>
+                
+                {% if product and current_image_url %} 
+                    <p style="margin-top: 10px;">
+                        Image actuelle: 
+                        <img src="{{ current_image_url }}" alt="Image Principale" style="width: 100px; height: auto; vertical-align: middle; margin-right: 10px; border-radius: 4px;">
+                        <small>(Télécharger un nouveau fichier pour remplacer.)</small>
+                    </p>
+                {% endif %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button primary">{% if product %}Sauvegarder les Modifications{% else %}Ajouter le Produit{% endif %}</button>
+                <a href="{{ url_for('admin_manage_products') }}" class="button secondary">Annuler</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

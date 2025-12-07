@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}Détails - {{ product.nom }}{% endblock %}
+
+{% block content %}
+    <div class="product-detail-container">
+        
+        <div class="breadcrumb">
+            <a href="{{ url_for('index') }}">Accueil</a> / 
+            <a href="{{ url_for('category_page', category_name=product.type) }}">{{ product.category_name }}</a> /
+            <span>{{ product.nom }}</span>
+        </div>
+        
+        <div class="product-gallery-section">
+            
+            <div id="product-carousel" class="carousel-viewport">
+                <div class="carousel-track">
+                    <div class="carousel-slide" data-index="0">
+                        <img src="{{ product.main_image }}" alt="{{ product.nom }}" class="product-image-2-3">
+                    </div>
+                    
+                    {% if product.detail_images and product.detail_images|length > 0 %}
+                        {% for image_obj in product.detail_images %}
+                            <div class="carousel-slide" data-index="{{ loop.index }}">
+                                <img src="{{ image_obj.url }}" alt="Détail {{ loop.index }}" class="product-image-2-3">
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div id="image-indicators" class="image-indicators"></div>
+        </div>
+
+        <div class="product-info-card">
+            
+            <div class="product-description-side">
+                
+                <span class="product-category-detail">{{ product.category_name }}</span>
+                
+                <h1>{{ product.nom }}</h1>
+                
+                <p class="price-detail">{{ "{:,.0f}".format(product.prix_gnf|float).replace(",", " ") }} GNF</p>
+                
+                {% if product.stock > 0 %}
+                    <p class="stock-status in-stock">
+                        ✅ En stock <span style="font-weight: bold;">({{ product.stock }} unités)</span>
+                    </p>
+                {% else %}
+                    <p class="stock-status out-of-stock">
+                        ❌ Rupture de stock
+                    </p>
+                {% endif %}
+
+                <h2>Description complète</h2>
+                <p class="compact-description-text">{{ product.description }}</p>
+                
+                <div class="whatsapp-link-detail">
+                    <p>Besoin d'aide ? 
+                        <a href="https://wa.me/{{ whatsapp_number }}?text=Bonjour,%20je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20produit:%20{{ product.nom | urlencode }}" target="_blank">
+                            Contactez-nous sur WhatsApp
+                        </a>
+                    </p>
+                </div>
+
+                <div style="height: 100px;"></div> 
+            </div>
+        </div>
+
+    </div>
+
+    <div id="fixed-action-bar" class="fixed-action-bar">
+        <div class="action-buttons-wrapper">
+            {% if product.stock > 0 %}
+                <button class="btn btn-fixed-primary" 
+                        onclick="addToCart('{{ product.id }}', '{{ product.nom }}', {{ product.prix_gnf }});">
+                    🛒 Ajouter au panier
+                </button>
+            {% else %}
+                <button class="btn btn-fixed-disabled" disabled>
+                    Indisponible
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        const carousel = document.getElementById('product-carousel');
+        const track = carousel.querySelector('.carousel-track');
+        const slides = Array.from(track.children);
+        const indicatorsContainer = document.getElementById('image-indicators');
+        let currentIndex = 0;
+        let isDragging = false;
+        let startPos = 0;
+        let currentTranslate = 0;
+        let prevTranslate = 0;
+        let animationID = null;
+        let autoScrollInterval = null;
+        const totalSlides = slides.length;
+        const totalImages = totalSlides;
+
+        // --- Initialisation et Indicateurs ---
+        function initIndicators() {
+            for (let i = 0; i < totalImages; i++) {
+                const dot = document.createElement('span');
+                dot.classList.add('indicator-dot');
+                if (i === 0) dot.classList.add('active');
+                dot.addEventListener('click', () => {
+                    currentIndex = i;
+                    setPositionByIndex();
+                });
+                indicatorsContainer.appendChild(dot);
+            }
+        }
+        
+        function updateIndicators(index) {
+            const dots = indicatorsContainer.querySelectorAll('.indicator-dot');
+            dots.forEach(dot => dot.classList.remove('active'));
+            dots[index].classList.add('active');
+        }
+
+        // --- Carrousel et Swipe ---
+        function setPositionByIndex() {
+            currentTranslate = currentIndex * -carousel.clientWidth;
+            prevTranslate = currentTranslate;
+            setSliderPosition();
+            updateIndicators(currentIndex);
+            // Redémarre le défilement auto après interaction manuelle
+            startAutoScroll();
+        }
+
+        function setSliderPosition() {
+            track.style.transform = `translateX(${currentTranslate}px)`;
+        }
+
+        function animation() {
+            setSliderPosition();
+            if (isDragging) requestAnimationFrame(animation);
+        }
+
+        // Gestion du Défilement Automatique
+        function startAutoScroll() {
+            // S'assurer qu'il n'y a qu'un seul intervalle actif
+            if (autoScrollInterval) clearInterval(autoScrollInterval);
+            
+            autoScrollInterval = setInterval(() => {
+                currentIndex = (currentIndex + 1) % totalSlides;
+                setPositionByIndex();
+            }, 5000); // Défilement toutes les 5 secondes
+        }
+
+        // Arrêter l'autoscroll lors d'une interaction manuelle
+        function stopAutoScroll() {
+            if (autoScrollInterval) clearInterval(autoScrollInterval);
+        }
+
+        // Événements de souris/touch
+        slides.forEach((slide, index) => {
+            // Touches (Mobile)
+            slide.addEventListener('touchstart', touchStart);
+            slide.addEventListener('touchend', touchEnd);
+            slide.addEventListener('touchmove', touchMove);
+        });
+
+        // Fonctions de glissement
+        function touchStart(e) {
+            stopAutoScroll(); // Arrêter l'autoscroll
+            isDragging = true;
+            startPos = e.changedTouches[0].clientX;
+            track.style.transition = 'none';
+            animationID = requestAnimationFrame(animation);
+        }
+
+        function touchMove(e) {
+            if (!isDragging) return;
+            const currentPosition = e.changedTouches[0].clientX;
+            currentTranslate = prevTranslate + currentPosition - startPos;
+        }
+
+        function touchEnd(e) {
+            isDragging = false;
+            cancelAnimationFrame(animationID);
+            
+            const movedBy = currentTranslate - prevTranslate;
+            const clientWidth = carousel.clientWidth;
+
+            // Détection du seuil (glissement significatif)
+            if (movedBy < -clientWidth * 0.2) {
+                currentIndex = (currentIndex < totalSlides - 1) ? currentIndex + 1 : totalSlides - 1;
+            } else if (movedBy > clientWidth * 0.2) {
+                currentIndex = (currentIndex > 0) ? currentIndex - 1 : 0;
+            }
+
+            // Réinitialiser la position
+            track.style.transition = 'transform 0.3s ease-out';
+            setPositionByIndex();
+            startAutoScroll(); // Redémarrer l'autoscroll
+        }
+
+
+        // Au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            initIndicators();
+            setPositionByIndex();
+            startAutoScroll();
+            
+            // Mise à jour de la position au redimensionnement
+            window.addEventListener('resize', setPositionByIndex); 
+        });
+    </script>
+    
+    <style>
+        /* Variables CSS (assurez-vous qu'elles sont définies dans votre base.html ou dans un fichier de style global) */
+        /*
+        :root {
+            --card-bg: #fff;
+            --primary-color: #ff5722;
+            --cta-color: #e91e63;
+            --success-color: #4CAF50;
+            --text-color: #333;
+            --shadow-light: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        */
+
+        /* Conteneur global */
+        .product-detail-container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 10px 0; /* Padding seulement haut/bas */
+            padding-bottom: 0; /* Important pour que le contenu touche le bas avant la barre fixe */
+        }
+        .breadcrumb { padding: 0 20px 10px 20px; }
+
+        /* --- 1. ZONE CARROUSEL/GALERIE --- */
+
+        .product-gallery-section {
+            margin-bottom: 10px;
+        }
+
+        /* Vue du carrousel */
+        .carousel-viewport {
+            width: 100%;
+            overflow: hidden; /* Masque les images qui débordent */
+            position: relative;
+            /* Pour maintenir le format 2:3 */
+            padding-top: 150%; 
+            height: 0; 
+        }
+
+        /* Conteneur des images (la "piste") */
+        .carousel-track {
+            display: flex;
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            transition: transform 0.3s ease-out; /* Transition pour le glissement */
+        }
+        
+        /* Une seule image/diapositive */
+        .carousel-slide {
+            width: var(--slide-width, 100vw); /* La largeur doit être celle du carrousel-viewport */
+            height: 100%;
+            flex-shrink: 0; /* Empêche le rétrécissement */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .product-image-2-3 { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; /* Remplit le cadre 2:3 */
+        }
+        
+        /* Indicateurs (points) */
+        .image-indicators {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .indicator-dot {
+            width: 8px;
+            height: 8px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .indicator-dot.active {
+            background-color: var(--primary-color);
+            transform: scale(1.2);
+        }
+
+        /* --- 2. ZONE D'INFORMATIONS (LE BLOC GRIS DÉFILANT) --- */
+
+        .product-info-card {
+            background-color: var(--card-bg);
+            padding: 15px 20px; /* Padding autour du contenu */
+            border-radius: 10px 10px 0 0; /* Coins arrondis en haut */
+            box-shadow: var(--shadow-light);
+            margin-bottom: 10px;
+        }
+        
+        .product-description-side { padding: 0; }
+        
+        /* Styles de Texte */
+        .product-category-detail {
+            font-size: 0.8rem; background-color: var(--secondary-color, #e0e0e0); color: white;
+            padding: 4px 8px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;
+        }
+        .product-description-side h1 { font-size: 1.2rem; margin: 0 0 5px 0; }
+        .price-detail { font-size: 2.2em; font-weight: 800; color: var(--cta-color); margin: 10px 0; }
+        .stock-status { font-weight: 600; padding: 5px 0; font-size: 0.9rem; }
+        .in-stock { color: var(--success-color); }
+        .out-of-stock { color: var(--admin-red, red); }
+        .product-description-side h2 { font-size: 1.1rem; margin: 15px 0 5px 0; color: var(--text-secondary, #666); }
+        .compact-description-text { font-size: 0.9rem; line-height: 1.4; }
+        .whatsapp-link-detail { margin-top: 15px; font-size: 0.8rem; text-align: center; }
+
+
+        /* --- 3. BARRE D'ACTION FIXE EN BAS (STYLE JUMIA/APP) --- */
+        
+        .fixed-action-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            max-width: 600px; /* Aligné avec le conteneur principal */
+            margin: 0 auto;
+            background-color: var(--card-bg);
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            padding: 10px 20px;
+            z-index: 100; /* Doit être au-dessus de tout */
+            /* Assurer que cela s'aligne au centre de l'écran si le max-width est dépassé */
+            transform: translateX(-50%);
+            left: 50%;
+        }
+
+        .action-buttons-wrapper {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+        }
+        
+        .btn-fixed-primary, .btn-fixed-disabled {
+            width: 100%; /* Le bouton prend toute la largeur disponible */
+            padding: 15px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-fixed-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-fixed-disabled {
+            background-color: var(--border-color, #ccc);
+            color: var(--text-secondary, #999);
+            cursor: not-allowed;
+        }
+    </style>
+{% endblock %}

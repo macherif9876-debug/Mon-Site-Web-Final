@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Tableau de Bord Administration{% endblock %}
+
+{% block content %}
+<div class="container admin-container">
+    <h2>👋 Bienvenue dans l'Administration</h2>
+
+    <div class="stats-grid">
+        <div class="stat-card stat-blue">
+            <h3>Produits Enregistrés</h3>
+            <p class="stat-value">{{ "{:,.0f}".format(products_count|float).replace(",", " ") }}</p> 
+            <span class="stat-icon">📦</span>
+        </div>
+        <div class="stat-card stat-green">
+            <h3>Commandes (Simulées)</h3>
+            <p class="stat-value">N/A</p>
+            <span class="stat-icon">✅</span>
+        </div>
+        <div class="stat-card stat-yellow">
+            <h3>Utilisateurs Admin</h3>
+            <p class="stat-value">1</p>
+            <span class="stat-icon">👤</span>
+        </div>
+        
+        <a href="{{ url_for('admin_manage_products') }}" class="action-card action-manage">
+            <span class="action-icon">📝</span>
+            <h4>Gérer les Produits</h4>
+            <p>Voir, modifier ou supprimer tous les produits existants.</p>
+        </a>
+        
+        <a href="{{ url_for('admin_add_product') }}" class="action-card action-add">
+            <span class="action-icon">➕</span>
+            <h4>Ajouter un Nouveau Produit</h4>
+            <p>Enregistrer un nouveau produit dans le catalogue.</p>
+        </a>
+                
+        <a href="{{ url_for('logout') }}" class="action-card action-logout">
+            <span class="action-icon">🚪</span>
+            <h4>Déconnexion Admin</h4>
+            <p>Se déconnecter de la session d'administration.</p>
+        </a>
+
+    </div>
+</div>
+
+<style>
+    /* -------------------------------------- */
+    /* STYLES SPÉCIFIQUES AU TABLEAU DE BORD */
+    /* -------------------------------------- */
+    
+    /* Grille de statistiques (les petites cartes d'infos en haut) */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+    }
+    
+    .stat-card {
+        background-color: var(--card-bg);
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-3px);
+    }
+    .stat-card h3 {
+        font-size: 1.1rem;
+        margin-bottom: 5px;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text-color);
+    }
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.6;
+    }
+    
+    .stat-blue { border-left: 5px solid var(--admin-blue); }
+    .stat-green { border-left: 5px solid var(--admin-green); }
+    .stat-yellow { border-left: 5px solid var(--admin-yellow); }
+    .stat-red { border-left: 5px solid var(--admin-red); }
+    
+    /* Grille d'Actions Rapides (les gros boutons/cartes) */
+    .action-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 30px;
+        margin-top: 25px;
+    }
+    
+    .action-card {
+        display: block;
+        background-color: var(--card-bg);
+        padding: 30px;
+        border-radius: 12px;
+        text-align: center;
+        text-decoration: none !important;
+        color: var(--text-color);
+        box-shadow: var(--shadow-light);
+        transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
+        border: 1px solid var(--border-color);
+    }
+    
+    .action-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--shadow-deep);
+        border-color: var(--admin-blue); /* Survol plus visible */
+    }
+    
+    .action-icon {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 10px;
+    }
+    
+    .action-card h4 {
+        font-size: 1.4rem;
+        margin-bottom: 5px;
+        color: var(--primary-color);
+    }
+    
+    .action-card p {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+    
+    /* Couleurs spécifiques aux cartes d'action */
+    .action-manage .action-icon { color: var(--admin-blue); }
+    .action-add .action-icon { color: var(--admin-green); }
+    .action-orders .action-icon { color: var(--admin-yellow); }
+    .action-logout .action-icon { color: var(--admin-red); }
+    
+    /* NOUVELLE COULEUR POUR LA PAGE A PROPOS */
+    .action-about .action-icon { color: purple; } 
+
+    
+    @media (max-width: 768px) {
+        .admin-container {
+            padding: 15px;
+        }
+        .stats-grid, .action-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+{% endblock %}

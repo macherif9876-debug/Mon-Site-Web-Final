@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %} 
+{% block title %}Gestion des Commandes{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>📋 Liste des Commandes</h2>
+    <p>Historique et détail de toutes les commandes passées.</p>
+
+    {% if orders %}
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Date</th>
+                    <th>Statut</th>
+                    <th>Détails Client</th>
+                    <th>Articles</th>
+                    <th>Total (GNF)</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.id|default('N/A') }}</td>
+                    <td>{{ order.date_commande|default('Date inconnue') }}</td>
+                    <td><span class="badge bg-warning">{{ order.statut|default('Inconnu') }}</span></td>
+                    <td>
+                        {{ order.client_name|default('Client non renseigné') }}
+                        <br>
+                        <small class="text-muted">Quartier: {{ order.client_quartier|default('N/A') }}</small>
+                    </td>
+                    <td>
+                        {% set products = order.produits_json if order.produits_json is iterable else [] %}
+                        {% for item in products %}
+                            {{ item.quantity }}x {{ item.name }} ({{ "{:,.0f}".format(item.price)|replace(',', ' ') }} GNF)<br>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <strong>{{ "{:,.0f}".format(order.total_gnf)|replace(',', ' ') }}</strong> GNF
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin_update_order_status', order_id=order.id) }}" style="display:inline;">
+                            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="En attente WhatsApp" {% if order.statut == 'En attente WhatsApp' %}selected{% endif %}>En attente</option>
+                                <option value="Confirmée" {% if order.statut == 'Confirmée' %}selected{% endif %}>Confirmée</option>
+                                <option value="Livrée" {% if order.statut == 'Livrée' %}selected{% endif %}>Livrée</option>
+                                <option value="Annulée" {% if order.statut == 'Annulée' %}selected{% endif %}>Annulée</option>
+                            </select>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        Aucune commande n'a été trouvée pour le moment.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

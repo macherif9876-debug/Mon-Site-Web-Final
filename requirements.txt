@@ -1,0 +1,8 @@
+flask
+supabase
+python-dotenv
+nltk
+werkzeug
+postgrest
+scikit-learn
+numpy

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bon Coin Bon Prix - {% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="light-mode">
+    <header>
+        <div class="header-left">
+            <h1 class="site-title"><a href="{{ url_for('index') }}">Bon Coin Bon Prix</a></h1>
+        </div>
+        
+        <div class="header-right">
+            <button id="theme-toggle" title="Changer de thème" class="icon-btn">☀️</button>
+            <a href="{{ url_for('cart') }}" class="icon-btn cart-button" title="Panier">
+                🛒<span id="cart-count" class="cart-badge"></span>
+            </a>
+            <button class="menu-button icon-btn" id="toggle-menu">☰</button>
+        </div>
+    </header>
+
+    <nav id="main-menu" class="main-menu">
+        <ul>
+            <li><a href="{{ url_for('index') }}">Accueil</a></li>
+            <li><a href="{{ url_for('category_page', category_name='telephone') }}">Téléphones</a></li>
+            <li><a href="{{ url_for('category_page', category_name='ordinateur') }}">Ordinateurs</a></li>
+            <li><a href="{{ url_for('category_page', category_name='accessoire') }}">Accessoires</a></li>
+            <li><a href="{{ url_for('about') }}">À Propos</a></li>
+        </ul>
+        <div class="auth-links">
+            {% if session.get('user') %}
+                <a href="{{ url_for('admin_dashboard') }}" class="btn-auth admin">Administration</a>
+                <a href="{{ url_for('logout') }}" class="btn-auth">Déconnexion</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="btn-auth">Connexion</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% if not 'admin' in request.path %}
+    <div class="assistant-container">
+        <button class="assistant-button" id="toggle-cherif">🤖</button>
+        <div class="assistant-window" id="cherif-window">
+            <div class="chat-messages" id="assistant-chatbox">
+                </div>
+            
+            <div class="chat-input">
+                <input type="text" id="assistant-input" placeholder="Posez votre question...">
+                <button id="mic-toggle" title="Question vocale">🎙️</button>
+                <button id="assistant-send-btn" title="Envoyer">➡️</button>
+                </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <script>
+        // Injecte le numéro WhatsApp principal de Flask dans la variable globale du navigateur (window).
+        // Le fichier main.js lira cette variable pour créer le lien de commande.
+        window.PRIMARY_WHATSAPP_NUMBER = "{{ whatsapp_number | default('') }}";
+        
+        // Stocke l'état du haut-parleur (par défaut: actif/true)
+        window.SPEAKER_ACTIVE = JSON.parse(localStorage.getItem('speakerActive')) ?? true;
+    </script>
+
+    {% block extra_scripts %}
+    {% endblock %}
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

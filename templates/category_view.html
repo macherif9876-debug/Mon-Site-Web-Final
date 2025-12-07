@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+    <h2 class="section-title">{{ title }}</h2>
+    
+    {% if error %}
+        <p class="error-message">Une erreur est survenue lors du chargement des produits: {{ error }}</p>
+    {% endif %}
+
+    <div class="product-grid category-page-grid">
+        {% for product in products %}
+        <div class="product-card">
+            <span class="product-category">{{ product.category_name }}</span>
+            <div class="product-image-placeholder">
+                <img src="{{ product.image_url or '/static/images/default_product.jpg' }}" alt="{{ product.nom }}">
+            </div>
+            
+            <h3>{{ product.nom }}</h3>
+            <p class="product-description">{{ product.description[:70] }}...</p>
+            <p class="price">{{ "{:,.0f}".format(product.prix_gnf|float).replace(",", " ") }} GNF</p>
+            <button class="btn btn-primary" onclick="addToCart('{{ product.id }}', '{{ product.nom }}', {{ product.prix_gnf }})">🛒 Ajouter au panier</button>
+        </div>
+        {% else %}
+        <p class="no-products">Aucun produit dans la catégorie "{{ title }}" pour le moment.</p>
+        {% endfor %}
+    </div>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "admin/dashboard.html" %}
+{% block admin_content %}
+
+<div class="container mt-4">
+    <h2 class="mb-4">✏️ Modifier le Contenu de la Page "À Propos"</h2>
+    
+    {% if success %}
+        <div class="alert alert-success" role="alert">
+            {{ success }}
+        </div>
+    {% endif %}
+    
+    {% if error %}
+        <div class="alert alert-danger" role="alert">
+            Erreur : {{ error }}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('admin_edit_about') }}">
+
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                Détails de la Mission/Concept
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-3">
+                    <label for="mission_title">Titre de la Mission</label>
+                    <input type="text" class="form-control" id="mission_title" name="mission_title" value="{{ about_content.mission_title }}" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="mission_text">Texte de la Mission (Description)</label>
+                    <textarea class="form-control" id="mission_text" name="mission_text" rows="5" required>{{ about_content.mission_text | e }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                Détails de l'Engagement Qualité
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-3">
+                    <label for="commitment_title">Titre de l'Engagement</label>
+                    <input type="text" class="form-control" id="commitment_title" name="commitment_title" value="{{ about_content.commitment_title }}" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="commitment_list_text">Liste des Engagements (Séparer par une virgule et un espace, ex: Point 1, Point 2)</label>
+                    <textarea class="form-control" id="commitment_list_text" name="commitment_list_text" rows="3" required>{{ about_content.commitment_list_text | e }}</textarea>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                Informations de Contact
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-3">
+                    <label for="whatsapp_number">Numéro WhatsApp (Complet, ex: 224621822134)</label>
+                    <input type="text" class="form-control" id="whatsapp_number" name="whatsapp_number" value="{{ about_content.whatsapp_number }}" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="email">Adresse Email</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ about_content.email }}" required>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-success btn-lg mb-4">💾 Enregistrer les Modifications</button>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary btn-lg mb-4">Annuler</a>
+
+    </form>
+</div>
+{% endblock %}

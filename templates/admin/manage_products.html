@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Admin - Gestion des Produits{% endblock %}
+
+{% block content %}
+    <div class="admin-container">
+        <h2>📦 Gestion des Produits</h2>
+        
+        <p><a href="{{ url_for('admin_add_product') }}" class="button primary">+ Ajouter un Nouveau Produit</a></p>
+
+        <form method="GET" action="{{ url_for('admin_manage_products') }}" class="search-form">
+            <input type="text" name="search" placeholder="Rechercher par nom..." value="{{ search_query or '' }}" class="text-input">
+            <button type="submit" class="button edit">Rechercher</button>
+        </form>
+
+        {% if products %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nom</th>
+                        <th>Catégorie</th>
+                        <th>Prix (GNF)</th>
+                        <th>Stock</th> 
+                        <th>Actions</th> 
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ product.id[:8] }}...</td>
+                        <td>{{ product.nom }}</td>
+                        <td>{{ product.category_name }}</td>
+                        <td>{{ "{:,.0f}".format(product.prix_gnf|float).replace(",", " ") }}</td>
+                        <td>{{ product.stock if product.stock is not none else 'N/A' }}</td> 
+                        <td class="action-buttons">
+                            
+                            <a href="{{ url_for('admin_manage_detail_images', product_id=product.id) }}" class="button cta" 
+                               style="margin-bottom: 5px; background-color: var(--admin-yellow); color: #333;">
+                                🖼️ Ajouter Photo Détail
+                            </a>
+                            
+                            <a href="{{ url_for('admin_edit_product', product_id=product.id) }}" class="button edit">Modifier</a>
+                            
+                            <form method="POST" action="{{ url_for('admin_delete_product', product_id=product.id) }}" style="display:inline;" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce produit ?');">
+                                <button type="submit" class="button delete">Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>Aucun produit trouvé.</p>
+        {% endif %}
+    </div>
+{% endblock %}
